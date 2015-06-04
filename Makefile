@@ -1,2 +1,2 @@
 all: lispx.c
-	gcc lispx.c -o lispx
+	gcc -std=c99 -Wall lispx.c -ledit -o lispx
