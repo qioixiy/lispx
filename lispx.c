@@ -26,6 +26,18 @@ void add_history(char *unused) {}
 
 #endif
 
+int number_of_nodes(mpc_ast_t *t) {
+	if (t->children_num == 0) {return 1;}
+	if (t->children_num >= 1) {
+		int total = 1;
+
+		for (int i = 0; i < t->children_num; i++){
+			total += number_of_nodes(t->children[i]);
+		}
+		return total;
+	}
+}
+
 int main(int argc, char **argv ){
 
 	mpc_parser_t *Number = mpc_new("number");
@@ -51,6 +63,19 @@ lispx    : /^/ <operator> <expr>+ /$/;			  \
 
 		mpc_result_t r;
 		if(mpc_parse("<stdin>", input, Lispx, &r)) {
+			/* load ast from output */
+			mpc_ast_t *a = r.output;
+			printf("%i\n", number_of_nodes(a));
+			printf("Tag: %s\n", a->tag);
+			printf("Contents: %s\n", a->contents);
+			printf("Number of children: %i\n", a->children_num);
+
+			/* get first child */
+			mpc_ast_t *c0 = a->children[0];
+			printf("First Child Tag: %s\n", c0->tag);
+			printf("First Child Contents: %s\n", c0->contents);
+			printf("First Child Number of children: %i\n", c0->children_num);
+			
 			mpc_ast_print(r.output);
 			mpc_ast_delete(r.output);
 		} else {
