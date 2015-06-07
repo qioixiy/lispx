@@ -41,31 +41,83 @@ int number_of_nodes(mpc_ast_t *t) {
 	return -1;
 }
 
-long eval_op(long x, char *op, long y)
-{
-	if(strcmp(op, "+") == 0) {return x+y;};
-	if(strcmp(op, "-") == 0) {return x-y;};
-	if(strcmp(op, "*") == 0) {return x*y;};
-	if(strcmp(op, "/") == 0) {return x/y;};
+typedef struct {
+	int type;
+	long num;
+	int err;
+}lval;
 
-	if(strcmp(op, "%") == 0) {return x%y;};
-	if(strcmp(op, "^") == 0) {return pow(x,y);};
+enum {LVAL_NUM, LVAL_ERR};
+enum {LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM};
 
-	return 0;
+/* create a new number type lval */
+lval lval_num(long x) {
+	lval v;
+	v.type =LVAL_NUM;
+	v.num = x;
+
+	return v;
 }
 
-long eval(mpc_ast_t *t)
+/* creat a new err type lval */
+lval lval_err(int x) {
+	lval v;
+	v.type = LVAL_ERR;
+	v.err = x;
+
+	return v;
+}
+
+/* print an lval */
+void lval_print(lval v) {
+	switch(v.type) {
+	case LVAL_NUM: printf("%li", v.num); break;
+	case LVAL_ERR:
+		switch(v.err){
+		case LERR_DIV_ZERO:	printf("Error: Division Bu zero!"); break;
+		case LERR_BAD_OP: printf("Error: Invalid Operator!"); break;
+		case LERR_BAD_NUM: printf("Error: Invalid Number!"); break;
+		}
+		break;
+	}
+}
+
+void lval_println(lval v) {
+	lval_print(v);
+	putchar('\n');
+}
+
+lval eval_op(lval x, char *op, lval y)
+{
+
+	if (x.type == LVAL_ERR) {return x;}
+	if (y.type == LVAL_ERR) {return y;}
+
+	if(strcmp(op, "+") == 0) {return lval_num(x.num + y.num);};
+	if(strcmp(op, "-") == 0) {return lval_num(x.num - y.num);};
+	if(strcmp(op, "*") == 0) {return lval_num(x.num * y.num);};
+	if(strcmp(op, "/") == 0) {return y.num == 0	? lval_err(LERR_DIV_ZERO) : lval_num(x.num/y.num);};
+	
+	if(strcmp(op, "%") == 0) {return lval_num(x.num % y.num);};
+		if(strcmp(op, "^") == 0) {return lval_num(pow(x.num, y.num));};
+
+	return lval_err(LERR_BAD_OP);
+}
+
+lval eval(mpc_ast_t *t)
 {
 	/* if tagged as number return it directly */
 	if (strstr(t->tag, "number")) {
-		return atoi(t->contents);
+		errno = 0;
+		long x = strtol(t->contents, NULL, 10);
+		return errno != ERANGE ? lval_num(x) : lval_err(LERR_BAD_NUM);
 	}
 
 	/* the operator is always second child */
 	char *op = t->children[1]->contents;
 
 	/* we store the third child in x */
-	long x = eval(t->children[2]);
+	lval x = eval(t->children[2]);
 
 	/* iterate the remaining children and combing. */
 	int i = 3;
@@ -117,8 +169,8 @@ lispx    : /^/ <operator> <expr>+ /$/;			  \
 			mpc_ast_print(r.output);
 
 			/* eval */
-			long result = eval(r.output);
-			printf("%li\n", result);
+			lval result = eval(r.output);
+			lval_println(result);
 
 			mpc_ast_delete(r.output);
 		} else {
