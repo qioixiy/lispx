@@ -28,6 +28,7 @@ void add_history(char *unused) {}
 
 int number_of_nodes(mpc_ast_t *t) {
 	if (t->children_num == 0) {return 1;}
+
 	if (t->children_num >= 1) {
 		int total = 1;
 
@@ -36,6 +37,41 @@ int number_of_nodes(mpc_ast_t *t) {
 		}
 		return total;
 	}
+
+	return -1;
+}
+
+long eval_op(long x, char *op, long y)
+{
+	if(strcmp(op, "+") == 0) {return x+y;};
+	if(strcmp(op, "-") == 0) {return x-y;};
+	if(strcmp(op, "*") == 0) {return x*y;};
+	if(strcmp(op, "/") == 0) {return x/y;};
+
+	return 0;
+}
+
+long eval(mpc_ast_t *t)
+{
+	/* if tagged as number return it directly */
+	if (strstr(t->tag, "number")) {
+		return atoi(t->contents);
+	}
+
+	/* the operator is always second child */
+	char *op = t->children[1]->contents;
+
+	/* we store the third child in x */
+	long x = eval(t->children[2]);
+
+	/* iterate the remaining children and combing. */
+	int i = 3;
+	while(strstr(t->children[i]->tag, "expr")) {
+		x = eval_op(x, op, eval(t->children[i]));
+		i++;
+	}
+
+	return x;
 }
 
 int main(int argc, char **argv ){
@@ -60,12 +96,11 @@ lispx    : /^/ <operator> <expr>+ /$/;			  \
 		char *input = readline("lispx>");
 		add_history(input);
 
-
 		mpc_result_t r;
 		if(mpc_parse("<stdin>", input, Lispx, &r)) {
 			/* load ast from output */
 			mpc_ast_t *a = r.output;
-			printf("%i\n", number_of_nodes(a));
+			printf("number_of_nodes: %i\n", number_of_nodes(a));
 			printf("Tag: %s\n", a->tag);
 			printf("Contents: %s\n", a->contents);
 			printf("Number of children: %i\n", a->children_num);
@@ -77,6 +112,11 @@ lispx    : /^/ <operator> <expr>+ /$/;			  \
 			printf("First Child Number of children: %i\n", c0->children_num);
 			
 			mpc_ast_print(r.output);
+
+			/* eval */
+			long result = eval(r.output);
+			printf("%li\n", result);
+
 			mpc_ast_delete(r.output);
 		} else {
 			mpc_err_print(r.error);
