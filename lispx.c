@@ -41,52 +41,152 @@ int number_of_nodes(mpc_ast_t *t) {
 	return -1;
 }
 
-typedef struct {
+
+typedef struct lval{
 	int type;
 	long num;
-	int err;
+
+	/* Error and Symbol types have some string data */
+	char *err;
+	char *sym;
+
+	/* count and point to a list of "lval*" */
+	int count;
+	struct lval **cell;
 }lval;
 
-enum {LVAL_NUM, LVAL_ERR};
+enum {LVAL_ERR, LVAL_NUM, LVAL_SYM, LVAL_SEXPR};
 enum {LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM};
 
-/* create a new number type lval */
-lval lval_num(long x) {
-	lval v;
-	v.type =LVAL_NUM;
-	v.num = x;
+/* construct a pointer to a new number lval */
+lval *lval_num(long x) {
+	lval *v = malloc(sizeof(lval));
+	v->type = LVAL_NUM;
+	v->num = x;
 
 	return v;
 }
 
-/* creat a new err type lval */
-lval lval_err(int x) {
-	lval v;
-	v.type = LVAL_ERR;
-	v.err = x;
+/* construct a pointer to a new err lval */
+lval *lval_err(char *m) {
+	lval *v = malloc(sizeof(lval));
+
+	v->type = LVAL_ERR;
+	v->err = malloc(strlen(m)+1);
+	strcpy(v->err, m);
 
 	return v;
 }
 
-/* print an lval */
-void lval_print(lval v) {
-	switch(v.type) {
-	case LVAL_NUM: printf("%li", v.num); break;
-	case LVAL_ERR:
-		switch(v.err){
-		case LERR_DIV_ZERO:	printf("Error: Division Bu zero!"); break;
-		case LERR_BAD_OP: printf("Error: Invalid Operator!"); break;
-		case LERR_BAD_NUM: printf("Error: Invalid Number!"); break;
+/* construct a pointer to a new symbol lval */
+lval *lval_sym(char *m)
+{
+	lval *v = malloc(sizeof(lval));
+
+	v->type = LVAL_SYM;
+	v->sym = malloc(strlen(m)+1);
+	strcpy(v->sym, m);
+
+	return v;
+}
+
+/* a pointer to a new empty sexpr lval */
+lval *lval_sexpr(void)
+{
+	lval *v = malloc(sizeof(lval));
+	v->type = LVAL_SEXPR;
+	v->count = 0;
+	v->cell=NULL;
+
+	return v;
+}
+
+void lval_del(struct lval *v)
+{
+	switch(v->type) {
+	case LVAL_NUM: break;
+	case LVAL_ERR: free(v->err); break;
+	case LVAL_SYM: free(v->sym); break;
+	case LVAL_SEXPR:
+		for(int i = 0; i < v->count; i++) {
+			lval_del(v->cell[i]);
 		}
+		free(v->cell);
 		break;
+	}
+
+	free(v);
+}
+
+lval *lval_read_num(mpc_ast_t *t) {
+	errno = 0;
+	long x = strtol(t->contents, NULL, 10);
+	return errno != ERANGE ?
+		lval_num(x) : lval_err("invalid number");
+}
+
+lval *lval_add(lval *v, lval *x) {
+	v->count++;
+	v->cell = realloc(v->cell, sizeof(lval *) * v->count);
+	v->cell[v->count-1]=x;
+
+	return v;
+}
+
+lval *lval_read(mpc_ast_t *t) {
+	/* if symbol or number return conversion to that type */
+	if(strstr(t->tag, "number")) {return lval_read_num(t);}
+	if(strstr(t->tag, "symbol")) {return lval_sym(t->contents);}
+	
+	/* if root (>) or sexpr then create empty list */
+	lval *x = NULL;
+	if (strcmp(t->tag, ">") == 0) {x = lval_sexpr();}
+	if (strstr(t->tag, "sexpr"))  {x = lval_sexpr();}
+
+	/* fill this list with any valid expression contained within */
+	for (int i = 0; i < t->children_num; i++) {
+		if (strcmp(t->children[i]->contents, "(") == 0) {continue;}
+		if (strcmp(t->children[i]->contents, ")") == 0) {continue;}
+		if (strcmp(t->children[i]->contents, "{") == 0) {continue;}
+		if (strcmp(t->children[i]->contents, "}") == 0) {continue;}
+		if (strcmp(t->children[i]->tag,  "regex") == 0) {continue;}
+		x = lval_add(x, lval_read(t->children[i]));
+	}
+
+	return x;
+}
+
+void lval_print(struct lval *v);
+void lval_expr_print(lval *v, char open, char close) {
+	putchar(open);
+	for(int i = 0; i < v->count; i++) {
+		/* print value contained within */
+		lval_print(v->cell[i]);
+
+		/* don't print trailing space if last element */
+		if (i != (v->count-1)) {
+			putchar(' ');
+		}
+	}
+
+	putchar(close);
+}
+
+void lval_print(struct lval *v) {
+	switch(v->type) {
+	case LVAL_NUM: printf("%li", v->num); break;
+	case LVAL_ERR: printf("Error: %s", v->err); break;
+	case LVAL_SYM: printf("%s", v->sym); break;
+	case LVAL_SEXPR: lval_expr_print(v, '(', ')'); break;
 	}
 }
 
-void lval_println(lval v) {
+void lval_println(struct lval *v) {
 	lval_print(v);
 	putchar('\n');
 }
 
+#if 0
 lval eval_op(lval x, char *op, lval y)
 {
 
@@ -128,21 +228,25 @@ lval eval(mpc_ast_t *t)
 
 	return x;
 }
+#endif
 
 int main(int argc, char **argv ){
 
 	mpc_parser_t *Number = mpc_new("number");
-	mpc_parser_t *Operator = mpc_new("operator");
+	mpc_parser_t *Symbol = mpc_new("symbol");
+	mpc_parser_t *Sexpr = mpc_new("sexpr");
 	mpc_parser_t *Expr = mpc_new("expr");
 	mpc_parser_t *Lispx = mpc_new("lispx");
 
 	mpca_lang(MPCA_LANG_DEFAULT,
 			  "\
-number   : /-?[0-9]+/;							  \
-operator : '+' | '-' | '*' | '/' | '%' | '^';	  \
-expr     : <number> | '(' <operator> <expr>+ ')'; \
-lispx    : /^/ <operator> <expr>+ /$/;			  \
-", Number, Operator, Expr, Lispx);
+number   : /-?[0-9]+/ ;							  \
+symbol   : '+' | '-' | '*' | '/' | '%' | '^' ;	  \
+sexpr    : '(' <expr>* ')' ;					  \
+expr     : <number> | <symbol> | <sexpr> ;		  \
+lispx    : /^/ <expr>* /$/ ;			  \
+",
+			  Number, Symbol, Sexpr, Expr, Lispx);
 
 	puts("lispx Version 0.0.1");
 	puts("Press Ctrl+c to exit\n");
@@ -153,6 +257,8 @@ lispx    : /^/ <operator> <expr>+ /$/;			  \
 
 		mpc_result_t r;
 		if(mpc_parse("<stdin>", input, Lispx, &r)) {
+
+#ifdef DEBUG
 			/* load ast from output */
 			mpc_ast_t *a = r.output;
 			printf("number_of_nodes: %i\n", number_of_nodes(a));
@@ -167,10 +273,11 @@ lispx    : /^/ <operator> <expr>+ /$/;			  \
 			printf("First Child Number of children: %i\n", c0->children_num);
 			
 			mpc_ast_print(r.output);
-
-			/* eval */
-			lval result = eval(r.output);
-			lval_println(result);
+#endif
+			
+			lval *v = lval_read(r.output);
+			lval_println(v);
+			lval_del(v);
 
 			mpc_ast_delete(r.output);
 		} else {
@@ -180,7 +287,7 @@ lispx    : /^/ <operator> <expr>+ /$/;			  \
 		
 		free(input);
 	}
-	mpc_cleanup(4, Number, Operator, Expr, Lispx);
+	mpc_cleanup(5, Number, Symbol, Sexpr, Expr, Lispx);
 
 	return 0;
 }
