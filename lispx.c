@@ -41,6 +41,8 @@ int number_of_nodes(mpc_ast_t *t) {
 	return -1;
 }
 
+enum {LVAL_ERR, LVAL_NUM, LVAL_SYM, LVAL_SEXPR, LVAL_QEXPR};
+enum {LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM};
 
 typedef struct lval{
 	int type;
@@ -55,8 +57,31 @@ typedef struct lval{
 	struct lval **cell;
 }lval;
 
-enum {LVAL_ERR, LVAL_NUM, LVAL_SYM, LVAL_SEXPR, LVAL_QEXPR};
-enum {LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM};
+lval *lval_num(long x);
+lval *lval_err(char *m);
+lval *lval_sym(char *m);
+lval *lval_sexpr(void);
+lval *lval_qexpr(void);
+lval *lval_read_num(mpc_ast_t *t);
+lval *lval_add(lval *v, lval *x);
+lval *lval_read(mpc_ast_t *t);
+lval *lval_pop(lval *v, int i);
+lval *lval_take(lval *v, int i);
+lval *builtin_head(lval *a);
+lval *builtin_tail(lval *a);
+lval *builtin_list(lval *a);
+lval *builtin_len(lval *a);
+lval *builtin_eval(lval *a);
+lval *builtin_join(lval *a);
+lval *builtin_op(lval *a, char *op);
+lval *builtin(lval *a, char *func);
+lval *lval_join(lval *x, lval *y);
+lval *lval_eval_sexpr(lval *v);
+lval *lval_eval(lval *v);
+void lval_del(struct lval *v);
+void lval_expr_print(lval *v, char open, char close);
+void lval_print(struct lval *v);
+void lval_println(struct lval *v);
 
 /* construct a pointer to a new number lval */
 lval *lval_num(long x) {
@@ -169,7 +194,6 @@ lval *lval_read(mpc_ast_t *t) {
 	return x;
 }
 
-void lval_print(struct lval *v);
 void lval_expr_print(lval *v, char open, char close) {
 	putchar(open);
 	for(int i = 0; i < v->count; i++) {
@@ -353,7 +377,6 @@ lval *builtin_list(lval *a) {
 	return a;
 }
 
-lval *lval_eval(lval *v);
 lval *builtin_eval(lval *a) {
 	LASSERT(a, a->count == 1,
 			"Function 'head' passed too many arguments");
