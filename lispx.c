@@ -100,8 +100,6 @@ lval *builtin_add(lenv *e,lval *a);
 lval *builtin_sub(lenv *e,lval *a);
 lval *builtin_mul(lenv *e,lval *a);
 lval *builtin_div(lenv *e,lval *a);
-lval *builtin_pow(lenv *e,lval *a);
-lval *builtin_rem(lenv *e,lval *a);
 lval *builtin_op(lenv *e, lval *a, char *op);
 lval *builtin_def(lenv *e, lval *a);
 lval *builtin(lenv *e, lval *a, char *func);
@@ -330,8 +328,6 @@ void lenv_add_builtins(lenv *e) {
 	lenv_add_builtin(e, "-", builtin_sub);
 	lenv_add_builtin(e, "*", builtin_mul);
 	lenv_add_builtin(e, "/", builtin_div);
-	lenv_add_builtin(e, "^", builtin_pow);
-	lenv_add_builtin(e, "%", builtin_rem);
 
 	/* variable function */
 	lenv_add_builtin(e, "def", builtin_def);
@@ -419,9 +415,6 @@ lval eval_op(lval x, char *op, lval y)
 	if(strcmp(op, "*") == 0) {return lval_num(x.num * y.num);};
 	if(strcmp(op, "/") == 0) {return y.num == 0	? lval_err(LERR_DIV_ZERO) : lval_num(x.num/y.num);};
 	
-	if(strcmp(op, "%") == 0) {return lval_num(x.num % y.num);};
-		if(strcmp(op, "^") == 0) {return lval_num(pow(x.num, y.num));};
-
 	return lval_err(LERR_BAD_OP);
 }
 
@@ -529,8 +522,6 @@ lval *builtin_op(lenv *e, lval *a, char *op) {
 		if(strcmp(op, "+") == 0) {x->num += y->num;}
 		if(strcmp(op, "-") == 0) {x->num -= y->num;}
 		if(strcmp(op, "*") == 0) {x->num *= y->num;}
-		if(strcmp(op, "%") == 0) {x->num %= y->num;}
-		if(strcmp(op, "^") == 0) {x->num = pow(x->num, y->num);}
 		if(strcmp(op, "/") == 0) {
 			if (y->num == 0) {
 				lval_del(x);
@@ -675,14 +666,6 @@ lval *builtin_div(lenv *e,lval *a) {
 	return builtin_op(e, a, "/");
 }
 
-lval *builtin_pow(lenv *e,lval *a) {
-	return builtin_op(e, a, "^");
-}
-
-lval *builtin_rem(lenv *e,lval *a) {
-	return builtin_op(e, a, "%");
-}
-
 lval *builtin(lenv *e, lval *a, char *func) {
 	if(strcmp("list", func) == 0) {return builtin_list(e, a);}
 	if(strcmp("head", func) == 0) {return builtin_head(e, a);}
@@ -691,7 +674,7 @@ lval *builtin(lenv *e, lval *a, char *func) {
 	if(strcmp("eval", func) == 0) {return builtin_eval(e, a);}
 	if(strcmp("len", func) == 0)  {return builtin_len(e, a);}
 
-	if(strstr("+-*/%^", func)) {return builtin_op(e, a, func);}
+	if(strstr("+-*/", func)) {return builtin_op(e, a, func);}
 
 	lval_del(a);
 	return lval_err("Unknown Funtcion!");
